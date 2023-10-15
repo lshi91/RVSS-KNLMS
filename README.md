@@ -1,5 +1,5 @@
 # RVSS-KNLMS
-Matlab implementation for robust VSS kernel normalized LMS 
+Matlab implementation for robust VSS kernel normalized LMS, one can directly use the uploaded matlab code to perform comparison.
 ## Citation
 If you use this code, please cite it:
 ```bibtex
