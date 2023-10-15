@@ -1,0 +1,305 @@
+% Online Kernel Algorithms for Combating impulsive noise 
+% Copyright by Long
+% Start:2021/6/22
+% description:compare algorithm performance in nonlinear channel equalization
+% consider two types of non-Gaussian noise
+
+clear all
+close all
+clc
+
+% data size (training set and testing set)
+N_tr = 1000;
+N_te = 50;
+
+%% MSE initialization for various algorithms
+mse_te = zeros(1,N_tr);
+mse_te_k = zeros(2,N_tr);
+mse_te_kse = zeros(1,N_tr);
+mse_te_krmn = zeros(1,N_tr);
+mse_te_kmc = zeros(1,N_tr);
+mse_te_ksig = zeros(1,N_tr);
+mse_te_kmvc = zeros(1,N_tr);
+mse_te_gkmc = zeros(1,N_tr);
+mse_te_pro = zeros(1,N_tr);
+
+for run = 1:1
+TD = 5; 
+D = 1; %time delay
+h = .1; %kernel size
+
+%% data generating && nonlinear channel
+u = randn(1,2500)>0; % Generate binary data
+u = 2*u-1; 
+z = u+0.5*[0,u(1:end-1)]; % Nonlinear channel
+ns = 0.4*randn(1,length(u)); % Gaussian channel noise
+x = z - 0.9*z.^2 + ns;  % Ouput of the nonlinear channel
+x_tr = x(1:1500);
+x_te = x(2001:2100);
+
+
+%% nonlinear data embedding
+X = zeros(TD,N_tr);
+for k=1:N_tr
+    X(:,k) = x_tr(k:k+TD-1)';
+end
+
+alfa_noise = rasd(N_tr,1.2,0,1/100,0); % alpha-stable noise
+T = x_tr(D+1:D+N_tr) + alfa_noise;
+T = T';
+
+% Test data
+X_te = zeros(TD,N_te);
+for k=1:N_te
+    X_te(:,k) = x_te(k:k+TD-1)';
+end
+T_te = x_te(D+1:D+N_te);
+T_te = T_te';
+
+%% Kernel LMS
+mu_k = [0.15 .05]; 
+% init
+e_k = zeros(N_tr,1);
+y_k = zeros(N_tr,1);
+y_k_te = zeros(N_te,1);
+% n=1 init
+e_k(1) = T(1);
+y_k(1) = 0;
+% mse_te_k(1) = mean(T_te.^2);
+for m = 1:2
+mse_te_k(m,1) = mse_te_k(m,1) + mean(T_te.^2);
+% start
+for n=2:N_tr
+    %training
+    ii = 1:n-1;
+    y_k(n) = mu_k(m)*e_k(ii)'*(exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+ 
+    e_k(n) = T(n) - y_k(n);
+    %testing
+    y_k_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_k_te(jj) = mu_k(m)*e_k(ii)'*(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err = T_te - y_k_te;
+    %mse_te_k(n) = mean(err.^2);
+    mse_te_k(m,n) =  mse_te_k(m,n) + mean(err.^2);
+end
+end
+
+%% Kernel sign error
+mu_kse = 0.2;
+% init
+e_kse = zeros(N_tr,1);
+y_kse = zeros(N_tr,1);
+y_kse_te = zeros(N_te,1);
+% n=1 init
+e_kse(1) = T(1);
+y_kse(1) = 0;
+% mse_te_k(1) = mean(T_te.^2);
+mse_te_kse(1) = mse_te_kse(1) + mean(T_te.^2);
+% start
+for n=2:N_tr
+    %training
+    ii = 1:n-1;
+    y_kse(n) = mu_kse*sign(e_kse(ii)')*(exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+ 
+    e_kse(n) = T(n) - y_kse(n);
+    %testing
+    y_kse_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_kse_te(jj) = mu_kse*sign(e_kse(ii)')*(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err_kse = T_te - y_kse_te;
+    %mse_te_k(n) = mean(err.^2);
+    mse_te_kse(n) =  mse_te_kse(n) + mean(err_kse.^2);
+end
+
+%% Kernel RMN
+mu_krmn = 0.1;
+lambda_krmn =0.2;
+% init
+e_krmn = zeros(N_tr,1);
+y_krmn = zeros(N_tr,1);
+y_krmn_te = zeros(N_te,1);
+% n=1 init
+e_krmn(1) = T(1);
+y_krmn(1) = 0;
+% mse_te_k(1) = mean(T_te.^2);
+mse_te_krmn(1) = mse_te_krmn(1) + mean(T_te.^2);
+% start
+for n=2:N_tr
+    %training
+    ii = 1:n-1;
+    y_krmn(n) = mu_krmn*(2*lambda_krmn*e_krmn(ii)+(1-lambda_krmn)*sign(e_krmn(ii)))' * (exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+ 
+    e_krmn(n) = T(n) - y_krmn(n);
+    %testing
+    y_krmn_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_krmn_te(jj) = mu_krmn*(2*lambda_krmn*e_krmn(ii)+(1-lambda_krmn)*sign(e_krmn(ii)))'*(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err_krmn = T_te - y_krmn_te;
+    %mse_te_k(n) = mean(err.^2);
+    mse_te_krmn(n) =  mse_te_krmn(n) + mean(err_krmn.^2);
+end
+
+%% Kernel MVC
+mu_kmvc = 0.2;
+a_kmvc = 6;
+tau = 1/(2*a_kmvc)^2;
+% init
+e_kmvc = zeros(N_tr,1);
+y_kmvc = zeros(N_tr,1);
+y_kmvc_te = zeros(N_te,1);
+% n=1 init
+e_kmvc(1) = T(1);
+y_kmvc(1) = 0;
+% mse_te_k(1) = mean(T_te.^2);
+mse_te_kmvc(1) = mse_te_kmvc(1) + mean(T_te.^2);
+% start
+for n=2:N_tr
+    %training
+    ii = 1:n-1;
+    y_kmvc(n) = mu_kmvc*(e_kmvc(ii)./(1.+tau*abs(e_kmvc(ii)).^2).^2)' * (exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+    e_kmvc(n) = T(n) - y_kmvc(n);
+    %testing
+    y_kmvc_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_kmvc_te(jj) = mu_kmvc*(e_kmvc(ii)./(1.+tau*abs(e_kmvc(ii)).^2).^2)'*(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err_kmvc = T_te - y_kmvc_te;
+    %mse_te_k(n) = mean(err.^2);
+    mse_te_kmvc(n) =  mse_te_kmvc(n) + mean(err_kmvc.^2);
+end
+
+%% Kernel MCC
+mu_kmc = .5;
+% h_kmc = 0.3;
+% init
+e_kmc = zeros(N_tr,1);
+y_kmc = zeros(N_tr,1);
+y_kmc_te = zeros(N_te,1);
+% n=1 init
+e_kmc(1) = T(1);
+y_kmc(1) = 0;
+mse_te_kmc(1) = mse_te_kmc(1) + mean(T_te.^2);
+% start
+for n = 2:N_tr
+    h_kmc = 0.2;
+    %training
+    ii = 1:n-1;
+    y_kmc(n) = mu_kmc*(exp(-e_kmc(ii).^2*h_kmc).*e_kmc(ii))'*(exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+    e_kmc(n) = T(n) - y_kmc(n);
+    %testing
+    y_kmc_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_kmc_te(jj) = mu_kmc*(exp(-e_kmc(ii).^2*h_kmc).*e_kmc(ii))'*(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err_kmc = T_te - y_kmc_te;
+    mse_te_kmc(n) = mse_te_kmc(n) + mean(err_kmc.^2);
+end
+
+%% GKMC
+mu_gkmc = .5;
+alpha_gkmc = 4;
+% init
+e_gkmc = zeros(N_tr,1);
+y_gkmc = zeros(N_tr,1);
+y_gkmc_te = zeros(N_te,1);
+% n=1 init
+e_gkmc(1) = T(1);
+y_gkmc(1) = 0;
+mse_te_gkmc(1) = mse_te_gkmc(1) + mean(T_te.^2);
+% start
+for n = 2:N_tr
+    h_gkmc = 0.05;
+    %training
+    ii = 1:n-1;
+    y_gkmc(n) = mu_gkmc*(exp(-abs(e_gkmc(ii)).^alpha_gkmc*h_gkmc).*abs(e_gkmc(ii)).^(alpha_gkmc-1).*sign(e_gkmc(ii)))'...
+                *(exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+    e_gkmc(n) = T(n) - y_gkmc(n);
+    %testing
+    y_gkmc_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_gkmc_te(jj) = mu_gkmc*(exp(-abs(e_gkmc(ii)).^alpha_gkmc*h_gkmc).*abs(e_gkmc(ii)).^(alpha_gkmc-1).*sign(e_gkmc(ii)))'...
+                        *(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err_gkmc = T_te - y_gkmc_te;
+    mse_te_gkmc(n) = mse_te_gkmc(n) + mean(err_gkmc.^2);
+end
+
+
+%% RVSS-KNLMS 
+mu_pro = 0.5;
+alpha_pro = 0.99;
+% init
+e_pro = zeros(N_tr,1);
+y_pro = zeros(N_tr,1);
+y_pro_te = zeros(N_te,1);
+% n=1 init
+e_pro(1) = T(1);
+delta = 5;
+delta_save = zeros(N_tr,1);
+delta_save(1) = delta;
+y_pro(1) = 0;
+mse_te_pro(1) = mse_te_pro(1) + mean(T_te.^2);
+% start
+for n = 2:N_tr
+    %training
+    ii = 1:n-1;
+    y_pro(n) = mu_pro*(min(abs(e_pro(ii)),sqrt(delta_save(ii))).*sign(e_pro(ii)))'*(exp(-sum((X(:,n)*ones(1,n-1)-X(:,ii)).^2)*h))';
+    e_pro(n) = T(n) - y_pro(n);
+    delta = alpha_pro*delta + (1-alpha_pro)*min(e_pro(n-1)^2,delta);
+    delta_save(n) = delta;
+    %testing
+    y_pro_te = zeros(N_te,1);
+    for jj = 1:N_te
+        ii = 1:n;
+        y_pro_te(jj) = mu_pro*(min(abs(e_pro(ii)),sqrt(delta_save(ii))).*sign(e_pro(ii)))'*(exp(-sum((X_te(:,jj)*ones(1,n)-X(:,ii)).^2)*h))';
+    end
+    err_pro = T_te - y_pro_te;
+    mse_te_pro(n) = mse_te_pro(n) + mean(err_pro.^2);
+end
+end
+
+%% ensemble average
+for kk = 1:2
+mse_te_k(kk,:) = mse_te_k(kk,:)/run;
+end
+mse_te_kse = mse_te_kse/run;
+mse_te_krmn= mse_te_krmn/run;
+mse_te_kmc = mse_te_kmc/run;
+mse_te_kmvc = mse_te_kmvc/run;
+mse_te_gkmc = mse_te_gkmc/run;
+mse_te_pro = mse_te_pro/run;
+
+%% plot and test
+figure(1)
+plot(mse_te_k(1,:),'b-','LineWidth',2)
+hold on
+plot(mse_te_kse, 'c-', 'LineWidth',2)
+hold on
+plot(mse_te_krmn, 'm-.', 'LineWidth',2)
+hold on
+plot(mse_te_kmc, 'g-', 'LineWidth',2)
+hold on
+plot(mse_te_kmvc, 'r-.', 'LineWidth',2)
+hold on
+plot(mse_te_gkmc, 'Color',[0.5 0.5 0.5], 'LineWidth',2)
+hold on
+plot(mse_te_pro, 'k-', 'LineWidth',2)
+set(gca, 'FontSize', 14);
+set(gca, 'FontName', 'Arial');
+legend('KLMS(\mu=0.15)','KSA(\mu=0.2)','KRMN(\mu=0.1,\lambda=0.2)','KMC(\mu=0.5, 1/\sigma^2=0.2)','KMVC(\mu=0.2, a=6)',...
+     'KGMC(\mu=0.5,\alpha=4,1/\sigma^2=0.05)','RVSS-KNLMS(\mu=0.5,\alpha=0.99)')
+xlabel('iteration')
+ylabel('testing MSE')
+
+
+
